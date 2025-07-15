@@ -1,5 +1,5 @@
 save_dir: runs_eeg # (str) directory to save the experiment results
-device: 1 # (int) device to use, e.g. 0 or 1 or 2 for single GPU
+device: 0 # (int) device to use, e.g. 0 or 1 or 2 for single GPU
 batch: 32 # (int) batch size 
 nbs: 64 # (int) nominal batch size
 num_workers: 4 # (int) how many subprocesses are used to load data in parallel
