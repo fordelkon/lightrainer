@@ -1,0 +1,31 @@
+save_dir: runs_vqvae_bias_lr # (str) directory to save the experiment results
+device: 0 # (int) device to use, e.g. 0 or 1 or 2 for single GPU
+batch: 64 # (int) batch size 
+nbs: 256 # (int) nominal batch size
+num_workers: 8 # (int) how many subprocesses are used to load data in parallel
+patience: 50 # (int) number of epochs with no improvement after which training will be stopped
+epochs: 3000 # (int) number of epochs to train
+exist_ok: True # (bool) whether to overwrite existing experiment, multi-gpu must be set True
+amp: False # (bool) whether to use automatic mixed precision training
+ptq: False # (bool) whether to use nvidia pytorch_quantization to post training quantize
+num_batches: None # (None or int) in post training quantize, we use `num_batches` to collect statistics
+method: entropy # (str) in post training quantize, we use `method` to decide the amax, choices=[entropy, max, percentile, mse]
+qat: False # (bool) whether to use nviida pytorch_quantization to quantize aware train
+trt_quant: False # (bool) whether to use TensorRT int8 quantization
+
+optimizer: Adam # (str) optimizer to use, choices=[SGD, Adam, Adamax, AdamW, NAdam, RAdam, RMSProp]
+scheduler: Cosine # (str) learning rate scheduler to use, choices=[Cosine, Linear, Exponential, Polynomial]
+lr0: 0.0002 # (float) initial learning rate (i.e. SGD=1E-2, Adam=1E-3)
+lrf: 0.1 # (float) final learning rate (lr0 * lrf)
+gamma: 0.9 # (float) < 1.0 the decay factor each epoch learning rate (lr0 * gamma**epochs) used in Exponential
+power: 2.0 # (float) controls the decay curve shape used in Polynomial
+momentum: 0.937 # (float) SGD momentum/Adam beta1
+weight_decay: 0.00005 # (float) optimizer weight decay 5e-4
+
+warmup_epochs: 3.0 # (float) warmup epochs (fractions ok)
+warmup_momentum: 0.8 # (float) warmup initial momentum
+warmup_bias_lr: 0.0005 # (float) warmup initial bias lr
+
+recon_weight: 10.0
+lpips_weight: 1.0
+vq_weight: 0.5
