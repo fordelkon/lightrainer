@@ -6,7 +6,8 @@ Simple Trainer for PyTorch Deep Learning
 <details open>
 <summary>安装</summary>
 
-将仓库克隆并在一个[**Python ≥ 3.12.0**](https://www.python.org/)的环境中安装依赖项。请确保你已安装[**PyTorch ≥ 2.7.0+cu128**](https://pytorch.org/get-started/locally/) 。
+1. 精简版安装
+> 将仓库克隆并在一个[**Python ≥ 3.12.0**](https://www.python.org/)的环境中安装依赖项。请确保你已安装[**PyTorch ≥ 2.7.0+cu128**](https://pytorch.org/get-started/locally/) 。
 
 ```bash
 git clone https://github.com/fordelkon/lightrainer.git
@@ -15,6 +16,14 @@ cd lightrainer
 
 pip install -r requirements.txt
 ```
+
+2. 完备版安装（在精简版的基础上）
+-  安装[`pytorch_quantization`库](https://github.com/NVIDIA/TensorRT/blob/main/tools/pytorch-quantization/README.md)
+
+- 安装[`wandb`库](https://pypi.org/project/wandb/)
+
+-  安装[`TensorRT`命令行](https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html)
+</details>
 
 <details open>
 <summary>使用教程</summary>
@@ -65,57 +74,13 @@ pip install -r requirements.txt
     - 自定义分类训练器中的训练函数
     ```python 
     def train(self, use_wandb: bool=False):
-        self.use_wandb = self.use_wandb & use_wandb
-        self.setup_train()
-        if self.use_wandb:
-            wandb.init(
-                project="cls-task", 
-                config={
-                    "batch_size": self.batch_size,
-                    "initial_learning_rate": self.lr0, 
-                    "final_learning_rate": self.lr0 * self.scheduler_params["lrf"], 
-                    "optimizer": self.optimizer_choice, 
-                    "scheduler": self.scheduler_choice, 
-                    "weight_decay": self.weight_decay, 
-                    "warmup_epochs": self.warmup_epochs, 
-                    "warmup_momentum": self.warmup_momentum, 
-                    "warmup_bias_lr": self.warmup_bias_lr, 
-                }
-            )
-        self.model = self.model.to(self.device)
+        ......
 
-        nb = len(self.train_loader) # number of batches
-        nw = max(round(self.warmup_epochs * nb), 100) if self.warmup_epochs > 0 else -1 # warmup iterations
-        last_opt_step = -1
-        self.optimizer.zero_grad()
         for epoch in range(1, self.epochs + 1):
-            print("\n")
-            print("-" * 30)
-            print("\n")
-            self.train_loss = 0.
-            self.start_epoch = epoch
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore") # supress 'Detected lr_scheduler.step() before optimizer.step()'
-                self.scheduler.step() # start schuduler <-> `last_epoch=0``
-            
-            self.model.train() # No freeze layers
-            pbar = enumerate(self.train_loader)
-            
-            pbar = tqdm(enumerate(self.train_loader), total=nb)
+            .......
             
             for i, batch in pbar:
-                # Warmup 
-                ni = i + nb * epoch
-                if ni <= nw:
-                    xi = [0, nw] # x interp
-                    self.accumulate = max(1, int(np.interp(ni, xi, [1, self.nbs / self.batch_size]).round()))
-                    for j, x in enumerate(self.optimizer.param_groups):
-                        # Bias lr falls from 0.1 to lr0, all other lrs rise from 0.0 to lr0
-                        x["lr"] = np.interp(
-                            ni, xi, [self.warmup_bias_lr if j == 0 else 0.0, x["initial_lr"] * self.lr_func(epoch)]
-                        )
-                        if "momentum" in x:
-                            x["momentum"] = np.interp(ni, xi, [self.warmup_momentum, self.momentum])
+                ......
 
                 # Forward
                 _, loss = self.get_loss(batch)
@@ -129,54 +94,14 @@ pip install -r requirements.txt
                     self.optimizer_step()
                     last_opt_step = ni
 
-                pbar.set_description(
-                    f"{epoch}/{self.epochs}",
-                    f"{self.get_memory():.3g}G",  # (GB) GPU memory util
-                )
+                ......
 
-            self.lr = {f"lr/pg{ir}": x["lr"] for ir, x in enumerate(self.optimizer.param_groups)}  # for loggers
-            print(f"All types `lr` of epoch {epoch}: {self.lr}")
 
-            self.train_loss /= len(self.train_loader)
-            print(f"Epoch {epoch}: Train loss {self.train_loss}")
-            if self.use_wandb:
-                wandb.log(
-                    {
-                        "epoch": epoch, 
-                        "train/avg_loss": self.train_loss, 
-                    }
-                )
-
-            final_epoch = epoch + 1 >= self.epochs
+            ......
 
             self.val_loss, self.fitness = self.validate()
-            print(f"Epoch {epoch}: Val loss {self.val_loss}, Val Acc {self.fitness}")
-            print(f"Epoch {epoch} Val Acc: {self.fitness}, before best Acc: {self.stopper.best_fitness}")
-            self.stop |= self.stopper(epoch + 1, self.fitness) or final_epoch
-            self.best_fitness = self.stopper.best_fitness
 
-            if self.stop:
-                break
-
-            if not final_epoch and not self.qat:
-                self.save_dir = increment_path(Path(self.kwdict["save_dir"]), exist_ok=self.kwdict["exist_ok"])  # increment save_dir
-                self.last, self.best = self.save_dir / "last.pt", self.save_dir / "best.pt"
-                
-                self.save_model()
-
-            if self.get_memory(fraction=True) > 0.5:
-                self.clear_memory() # clear if memory utilization > 50%
-
-            print(f"\n{self.start_epoch} epochs completed!")
-            print("\n")
-            print("-" * 30)
-            print("\n")
-        self.clear_memory()
-        if self.use_wandb:
-            wandb.finish()
-
-        # After train we can export onnx
-        self.onnx = self.save_dir / "best.onnx"
+            ......
 
     @torch.inference_mode()
     def validate(self):
@@ -219,65 +144,13 @@ pip install -r requirements.txt
     - 自定义图像生成训练器的训练函数（针对`VQVAE`）
     ```python
     def train(self, use_wandb: bool=False):
-        self.use_wandb = use_wandb & self.use_wandb
-        self.setup_train()
-        if self.use_wandb:
-            wandb.init(
-                project="imgen-task", 
-                config={
-                    "batch_size": self.batch_size,
-                    "initial_learning_rate": self.lr0, 
-                    "final_learning_rate": self.lr0 * self.scheduler_params["lrf"], 
-                    "optimizer": self.optimizer_choice, 
-                    "scheduler": self.scheduler_choice, 
-                    "weight_decay": self.weight_decay, 
-                    "warmup_epochs": self.warmup_epochs, 
-                    "warmup_momentum": self.warmup_momentum, 
-                    "warmup_bias_lr": self.warmup_bias_lr, 
-                    "recon_weight": self.kwdict["recon_weight"], 
-                    "lpips_weight": self.kwdict["lpips_weight"], 
-                    "vq_weight": self.kwdict["vq_weight"],
-                }
-            )
-        self.lpips_fn = lpips.LPIPS().to(self.device)
-        self.model = self.model.to(self.device)
+        ......
 
-        nb = len(self.train_loader) # number of batches
-        nw = max(round(self.warmup_epochs * nb), 100) if self.warmup_epochs > 0 else -1 # warmup iterations
-        last_opt_step = -1
-        self.optimizer.zero_grad()
         for epoch in range(1, self.epochs + 1):
-            print("\n")
-            print("-" * 30)
-            print("\n")
-            self.train_loss = 0.
-            self.train_loss_recon = 0.
-            self.train_loss_lpips = 0.
-            self.train_loss_vq = 0.
-            self.train_perplexity = 0.
-            self.start_epoch = epoch
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore") # supress 'Detected lr_scheduler.step() before optimizer.step()'
-                self.scheduler.step()
-            
-            self.model.train() # No freeze layers
-            pbar = enumerate(self.train_loader)
-            
-            pbar = tqdm(enumerate(self.train_loader), total=nb)
+            ......
             
             for i, batch in pbar:
-                # Warmup 
-                ni = i + nb * epoch
-                if ni <= nw:
-                    xi = [0, nw] # x interp
-                    self.accumulate = max(1, int(np.interp(ni, xi, [1, self.nbs / self.batch_size]).round()))
-                    for j, x in enumerate(self.optimizer.param_groups):
-                        # Bias lr falls from 0.1 to lr0, all other lrs rise from 0.0 to lr0
-                        x["lr"] = np.interp(
-                            ni, xi, [self.warmup_bias_lr if j == 0 else 0.0, x["initial_lr"] * self.lr_func(epoch)]
-                        )
-                        if "momentum" in x:
-                            x["momentum"] = np.interp(ni, xi, [self.warmup_momentum, self.momentum])
+                ......
 
                 # Forward
                 loss_vq, loss_recon, loss_lpips, perplexity, psnr, ssim = self.get_loss(batch)
@@ -296,28 +169,9 @@ pip install -r requirements.txt
                     self.optimizer_step()
                     last_opt_step = ni
 
-                pbar.set_description(
-                    f"{epoch}/{self.epochs}",
-                    f"{self.get_memory():.3g}G",  # (GB) GPU memory util
-                )
+                ......
 
-                if self.use_wandb:
-                    if i % 50 == 0:
-                        wandb.log(
-                            {
-                                "step": (epoch - 1) * nb + i, 
-                                "train/loss": loss.item(), 
-                                "train/recon_loss": loss_recon.item(), 
-                                "train/perceptual_loss": loss_lpips.item(), 
-                                "train/vq_loss": loss_vq.item(), 
-                                "train/perplexity": perplexity.item(), 
-                                "train/psnr": psnr.item(), 
-                                "train/ssim": ssim.item(), 
-                            }
-                        )
-
-            self.lr = {f"lr/pg{ir}": x["lr"] for ir, x in enumerate(self.optimizer.param_groups)}  # for loggers
-            print(f"All types `lr` of epoch {epoch}: {self.lr}")
+            ......
 
             self.train_loss /= nb
             self.train_loss_recon /= nb
@@ -325,51 +179,11 @@ pip install -r requirements.txt
             self.train_loss_vq /= nb
             self.train_perplexity /= nb
 
-            print(f"Epoch {epoch}: Train loss {self.train_loss}")
-            if self.use_wandb:
-                wandb.log(
-                    {
-                        "epoch": epoch, 
-                        "train/avg_loss": self.train_loss, 
-                        "train/avg_recon_loss": self.train_loss_recon, 
-                        "train/avg_perceptual_loss": self.train_loss_lpips, 
-                        "train/avg_perplexity": self.train_perplexity, 
-                    }
-                )
-
-            final_epoch = epoch + 1 >= self.epochs
+            ......
 
             self.val_loss, perplexity, self.fitness, ssim= self.validate()
 
-            print(f"Epoch {epoch}: Val loss {self.val_loss}, Val Peak Singal-to-Ratio is {self.fitness}, Val Perplexity is {perplexity}, Val Structure Similarity Index is {ssim}.")
-            print(f"Epoch {epoch} Val Peak Singal-to-Ratio: {self.fitness}, before best Peak Singal-to-Ratio: {self.stopper.best_fitness}")
-            self.stop |= self.stopper(epoch + 1, self.fitness) or final_epoch
-            self.best_fitness = self.stopper.best_fitness
-
-            if self.stop:
-                break
-
-            if not final_epoch and not self.qat:
-                self.save_dir = increment_path(Path(self.kwdict["save_dir"]), exist_ok=self.kwdict["exist_ok"])  # increment save_dir
-                self.last, self.best = self.save_dir / "last.pt", self.save_dir / "best.pt"
-                
-                self.save_model()
-
-            if self.get_memory(fraction=True) > 0.5:
-                self.clear_memory() # clear if memory utilization > 50%
-
-            print(f"\n{self.start_epoch} epochs completed!")
-            print("\n")
-            print("-" * 30)
-            print("\n")
-
-        self.clear_memory()
-
-        if self.use_wandb:
-            wandb.finish()
-
-        # After train we can export onnx
-        self.onnx = self.save_dir / "best.onnx"
+            ......
 
     @torch.inference_mode()
     def validate(self):
@@ -436,8 +250,10 @@ pip install -r requirements.txt
         return (loss_vq, loss_recon, loss_lpips, 
                 perplexity, psnr, ssim)
     ```
+</details>
 
 <details open>
 <summary>总结</summary>
 
 对比两个特定任务的`train`方法可以看出，该方法的基本框架是没有什么变化的，主要变化的是`get_loss`和`validate`方法的返回结果，由于不同模型的损失以及选择保存模型的评判标准不同，所以这两个方法具有很强的灵活性。当然有些时候需要对`dataset`进行进一步的处理比如`padding`等方法，需要再定义`collate_fn`方法再`get_loader`里使用。有些情况我们只想保存模型的一部分，也可以根据自己**model**的结构自定义`save_model`方法来保存自己想保存的部分。
+</details>
