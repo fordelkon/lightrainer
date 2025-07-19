@@ -1,6 +1,10 @@
 import torch
 from torch import nn
-from pytorch_quantization import nn as quant_nn
+try:
+    from pytorch_quantization import nn as quant_nn
+    quant_enable = True
+except ImportError:
+    quant_enable = False
 import math
 
 
@@ -55,19 +59,6 @@ class ConvWithConstraint(nn.Module):
 
     def forward_fuse(self, x):
         return self.act(self.conv(x))
-    
-
-class QuantConv2dWithConstraint(quant_nn.QuantConv2d):
-    def __init__(self, *args, max_norm=1.0, **kwargs):
-        self.max_norm = max_norm
-        super().__init__(*args, **kwargs)
-    
-    def forward(self, x):
-        self.weight.data = torch.renorm(
-            self.weight.data, p=2, dim=0, maxnorm=self.max_norm
-        )
-        return super().forward(x)
-    
 
 class DWConvWithConstraint(ConvWithConstraint):
     def __init__(self, c1, c2, max_norm=1.0, k=1, act=True, s=1, p=0, d=1):
@@ -76,7 +67,7 @@ class DWConvWithConstraint(ConvWithConstraint):
 
 class SeparableConv(nn.Module):
     def __init__(self, c1, c2, k=1, s=1, p=None, 
-                 d=1, act=True, has_bias=True):
+                d=1, act=True, has_bias=True):
         super().__init__()
         self.dw = nn.Conv2d(c1, c1, k, stride=s, padding=autopad(k, p, d), 
                             dilation=d, groups=c1, bias=has_bias)
@@ -100,14 +91,26 @@ class LinearWithConstraint(nn.Linear):
         )
         return super().forward(x)
     
+if quant_enable:
+    class QuantConv2dWithConstraint(quant_nn.QuantConv2d):
+        def __init__(self, *args, max_norm=1.0, **kwargs):
+            self.max_norm = max_norm
+            super().__init__(*args, **kwargs)
+        
+        def forward(self, x):
+            self.weight.data = torch.renorm(
+                self.weight.data, p=2, dim=0, maxnorm=self.max_norm
+            )
+            return super().forward(x)
+        
 
-class QuantLinearWithConstraint(quant_nn.QuantLinear):
-    def __init__(self, *args, max_norm=1.0, **kwargs):
-        self.max_norm = max_norm
-        super().__init__(*args, **kwargs)
+    class QuantLinearWithConstraint(quant_nn.QuantLinear):
+        def __init__(self, *args, max_norm=1.0, **kwargs):
+            self.max_norm = max_norm
+            super().__init__(*args, **kwargs)
 
-    def forward(self, x):
-        self.weight.data = torch.renorm(
-            self.weight.data, p=2, dim=0, maxnorm=self.max_norm
-        )
-        return super().forward(x)
+        def forward(self, x):
+            self.weight.data = torch.renorm(
+                self.weight.data, p=2, dim=0, maxnorm=self.max_norm
+            )
+            return super().forward(x)
