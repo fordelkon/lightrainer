@@ -278,7 +278,7 @@ pip install -r requirements.txt
 ```
 </pre>
 
-- (多模态图模型节点分类任务（以`MMGCN`为例）)[https://colab.research.google.com/drive/1cWtSiUQm0J7kUJQyveMcdxTXJF8L5jT0?usp=sharing]
+- 多模态图模型节点分类任务（以`MMGCN`为例，[colab notebook链接](https://colab.research.google.com/drive/1cWtSiUQm0J7kUJQyveMcdxTXJF8L5jT0?usp=sharing)）
     - 将`lightrainer`项目克隆下来之后新建立要训练的`MMGCN`模型文件与该项目同级（文件排布如下所示）
 <pre lang="markdown">
 📦 myprojects
