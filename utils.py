@@ -39,70 +39,56 @@ def load_yml(yml_file: Path):
     return kwdict
 
 
-def select_device(device: Optional[Union[str, torch.device]]=""):
-    """Select and configure the single device (CPU or CUDA GPU) for PyTorch training or inference.
+import os
+import torch
+from typing import Optional, Union
+
+def select_device(device: Optional[Union[str, torch.device]] = ""):
+    """
+    Select and configure device (CPU or CUDA GPU) for PyTorch.
+    Falls back to CPU if GPU unavailable.
 
     Parameters
     ----------
-    device : Optional[Union[str, torch.device]]
-        Device to use. Examples: 'cpu', 'cuda', '0', '0,1' -> convert 'cuda', torch.device('cuda:0').
-        If empty, defaults to GPU if available, else CPU.
+    device : str | torch.device | None
+        Examples: 'cpu', 'cuda', '0', '0,1', '', torch.device('cuda:0')
 
     Returns
     -------
-    torch.device: 
-        Selected PyTorch device object, e.g., torch.device('cuda:0') or torch.device('cpu').
-
-    Examples
-    --------
-    >>> device = select_device('cpu')  # force CPU
-    >>> device = select_device()  # auto-select best device (GPU preferred)
+    torch.device
+        e.g. torch.device('cuda:0') or torch.device('cpu')
     """
 
-    
     if isinstance(device, torch.device):
         return device
-    
-    device = str(device).lower()
-    for remove in "cuda:", "none", "(", ")", "[", "]", "'", " ":
-        device = device.replace(remove, "") # to string, 'cuda:0' -> '0' and '(0, 1)' -> '0,1'
-    cpu = device == "cpu"
-    if cpu:
-        os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # force torch.cuda.is_avaliable() = False
-    elif device: # GPU device requested 
-        if device == "cuda":
-            device = "0"
-        if "," in device:
-            device = ",".join([x for x in device.split(",") if x]) # remove sequential commas, i.e. "0,,1" -> "0,1"
-        # visible = os.environ.get("CUDA_VISIBLE_DEVICES", None)
-        # os.environ["CUDA_VISIBLE_DEVICES"] = device # set environment variable - must be before assert is_available()
-        if not (torch.cuda.is_available() and torch.cuda.device_count() >= len(device.split(","))):
-            print(f"Select Device CUDA {device}")
-            install = (
-                "See https://pytorch.org/get-started/locally/ for up-to-date torch install instructions if no "
-                "CUDA devices are seen by torch.\n"
-                if torch.cuda.device_count() == 0
-                else ""
-            )
-            raise ValueError(
-                f"Invalid CUDA 'device={device}' requested."
-                f" Use 'device=cpu' or pass valid CUDA device(s) if available,"
-                f" i.e. 'device=0' for single GPU\n"
-                f"\ntorch.cuda.is_available(): {torch.cuda.is_available()}"
-                f"\ntorch.cuda.device_count(): {torch.cuda.device_count()}"
-                # f"\nos.environ['CUDA_VISIBLE_DEVICES']: {visible}\n"
-                f"{install}"
-            )
-    
-    if not cpu and torch.cuda.is_available(): # prefer GPU if available
-        devices = device.split(",") if device else "0" # i.e. "0,1" -> ["0", "1"]
-        # n = len(devices) # device count
-        arg = f"cuda:{devices[0]}" if len(devices) == 1 else "cuda:0"
-    else:
-        arg = "cpu"
-        torch.set_num_threads(min(8, max(1, os.cpu_count() - 1)))
-    return torch.device(arg)
 
+    device = str(device).lower().strip()
+    for r in ["cuda:", "none", "(", ")", "[", "]", "'", " "]:
+        device = device.replace(r, "")
+    
+    # Case 1: Force CPU
+    if device == "cpu":
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+        torch.set_num_threads(min(8, max(1, os.cpu_count() - 1)))
+        return torch.device("cpu")
+
+    # Case 2: Try GPU
+    try:
+        if device == "":
+            device = "0" if torch.cuda.is_available() else "cpu"
+
+        if device != "cpu" and torch.cuda.is_available():
+            device_ids = [d for d in device.split(",") if d.strip().isdigit()]
+            if len(device_ids) == 0 or int(device_ids[0]) >= torch.cuda.device_count():
+                raise RuntimeError
+            return torch.device(f"cuda:{device_ids[0]}")
+        else:
+            raise RuntimeError
+
+    except Exception:
+        print("Warning: CUDA device unavailable or invalid, using CPU instead.")
+        torch.set_num_threads(min(8, max(1, os.cpu_count() - 1)))
+        return torch.device("cpu")
 
 def increment_path(path: Path, exist_ok: bool=False, 
                    sep: str="", mkdir: bool=True):
